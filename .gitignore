@@ -1,4 +1,9 @@
 logs/
 output/
+models/
+__pycache__/
+
 future_phase0.2_plan.md
 future_phase0.3_plan.md
+
+observations.md
