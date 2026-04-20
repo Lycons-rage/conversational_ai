@@ -13,10 +13,10 @@ audio_input_queue = asyncio.Queue()
 audio_output_queue = queue.Queue()
 
 
-# 🎤 Mic callback → asyncio queue
+# Mic callback → asyncio queue
 def audio_callback(indata, frames, time, status):
     if status:
-        print("⚠️ Mic:", status)
+        print("Mic:", status)
 
     chunk = indata.copy().flatten()
 
@@ -26,7 +26,7 @@ def audio_callback(indata, frames, time, status):
     )
 
 
-# 🔌 Send audio to server
+# Send audio to server
 async def sender(ws):
     while True:
         chunk = await audio_input_queue.get()
@@ -37,7 +37,7 @@ async def sender(ws):
         }))
 
 
-# 🔌 Receive audio from server
+# Receive audio from server
 async def receiver(ws):
     while True:
         msg = await ws.recv()
@@ -48,10 +48,10 @@ async def receiver(ws):
             audio_output_queue.put(audio)
 
 
-# 🔊 Continuous speaker stream (FIXED)
+# Continuous speaker stream (FIXED)
 def speaker_callback(outdata, frames, time, status):
     if status:
-        print("⚠️ Speaker:", status)
+        print("Speaker:", status)
 
     try:
         chunk = audio_output_queue.get_nowait()
@@ -77,7 +77,7 @@ async def speaker():
     )
 
     with stream:
-        print("🔊 Speaker streaming started")
+        print("Speaker streaming started")
         while True:
             await asyncio.sleep(0.1)
 
@@ -86,10 +86,10 @@ async def main():
     global loop
     loop = asyncio.get_event_loop()
 
-    print("🔌 Connecting to server...")
+    print("Connecting to server...")
 
     async with websockets.connect(WS_URL) as ws:
-        print("✅ Connected")
+        print("Connected")
 
         with sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -97,7 +97,7 @@ async def main():
             blocksize=CHUNK_SIZE,
             callback=audio_callback
         ):
-            print("🎤 Mic streaming started")
+            print("Mic streaming started")
 
             await asyncio.gather(
                 sender(ws),
