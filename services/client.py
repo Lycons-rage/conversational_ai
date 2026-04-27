@@ -13,59 +13,97 @@ audio_input_queue = asyncio.Queue()
 audio_output_queue = queue.Queue()
 
 
-# 🎤 Mic callback → asyncio queue
+# Mic callback → asyncio queue
 def audio_callback(indata, frames, time, status):
     if status:
-        print("⚠️ Mic:", status)
-
+        print("Mic:", status)
     chunk = indata.copy().flatten()
-
     asyncio.run_coroutine_threadsafe(
         audio_input_queue.put(chunk),
         loop
     )
 
 
-# 🔌 Send audio to server
+# Send audio to server
 async def sender(ws):
     while True:
         chunk = await audio_input_queue.get()
-
         await ws.send(json.dumps({
             "type": "audio_chunk",
             "data": chunk.tolist()
         }))
 
 
-# 🔌 Receive audio from server
+# Receive audio from server
 async def receiver(ws):
     while True:
         msg = await ws.recv()
-        data = json.loads(msg)
 
-        if data["type"] == "audio_chunk":
-            audio = np.array(data["data"], dtype=np.float32)
-            audio_output_queue.put(audio)
+        # 🔹 AUDIO
+        if isinstance(msg, bytes):
+            audio = np.frombuffer(msg, dtype=np.int16)
+            audio = audio.astype(np.float32) / 32767.0
+
+            # 🔥 IMPORTANT: accumulate full message first
+            # (ensures proper chunk alignment)
+            for i in range(0, len(audio), CHUNK_SIZE):
+                chunk = audio[i:i + CHUNK_SIZE]
+
+                # pad last chunk to maintain size consistency
+                if len(chunk) < CHUNK_SIZE:
+                    padded = np.zeros(CHUNK_SIZE, dtype=np.float32)
+                    padded[:len(chunk)] = chunk
+                    chunk = padded
+
+                audio_output_queue.put(chunk)
+
+            continue  # keep this OUTSIDE loop
+
+        # 🔹 TEXT
+        if isinstance(msg, str):
+            msg = msg.strip()
+            if not msg:
+                continue
+
+            try:
+                data = json.loads(msg)
+            except json.JSONDecodeError:
+                print("\nSkipping invalid JSON:", msg[:50])
+                continue
+
+            if data["type"] == "text":
+                print("\nSTT:", data["data"])
+
+            elif data["type"] == "llm_token":
+                print(data["data"], end="", flush=True)
 
 
-# 🔊 Continuous speaker stream (FIXED)
+# Continuous speaker stream (FIXED)
 def speaker_callback(outdata, frames, time, status):
     if status:
-        print("⚠️ Speaker:", status)
+        print("Speaker:", status)
 
-    try:
-        chunk = audio_output_queue.get_nowait()
-    except queue.Empty:
-        outdata.fill(0)
-        return
+    output = np.zeros(frames, dtype=np.float32)
+    filled = 0
 
-    chunk = chunk.reshape(-1, 1)
+    while filled < frames:
+        try:
+            chunk = audio_output_queue.get_nowait()
+        except queue.Empty:
+            break
 
-    if len(chunk) < len(outdata):
-        outdata[:len(chunk)] = chunk
-        outdata[len(chunk):].fill(0)
-    else:
-        outdata[:] = chunk[:len(outdata)]
+        remaining = frames - filled
+        take = min(len(chunk), remaining)
+
+        output[filled:filled+take] = chunk[:take]
+
+        # 🔥 put back leftover (VERY IMPORTANT)
+        if take < len(chunk):
+            audio_output_queue.put(chunk[take:])
+
+        filled += take
+
+    outdata[:] = output.reshape(-1, 1)
 
 
 async def speaker():
@@ -77,7 +115,10 @@ async def speaker():
     )
 
     with stream:
-        print("🔊 Speaker streaming started")
+        print("Speaker streaming started")
+        # wait until buffer has some data
+        while audio_output_queue.qsize() < 5:
+            await asyncio.sleep(0.01)
         while True:
             await asyncio.sleep(0.1)
 
@@ -85,11 +126,9 @@ async def speaker():
 async def main():
     global loop
     loop = asyncio.get_event_loop()
-
-    print("🔌 Connecting to server...")
-
+    print("Connecting to server...")
     async with websockets.connect(WS_URL) as ws:
-        print("✅ Connected")
+        print("Connected")
 
         with sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -97,8 +136,7 @@ async def main():
             blocksize=CHUNK_SIZE,
             callback=audio_callback
         ):
-            print("🎤 Mic streaming started")
-
+            print("Mic streaming started")
             await asyncio.gather(
                 sender(ws),
                 receiver(ws),

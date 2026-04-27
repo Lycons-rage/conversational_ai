@@ -8,38 +8,41 @@ class LLM:
 
     def stream(self, prompt):
         payload = {
+            "system": "You are a concise, helpful voice assistant. Keep responses precise and conversational.",
             "model": self.model,
             "prompt": prompt,
-            "stream": True
+            "stream": True,
+            "options": {
+                "num_predict": 80,   # 🔥 limit output tokens
+                "temperature": 0.7,
+                "top_p": 0.8
+            }
         }
-
         response = requests.post(self.url, json=payload, stream=True)
-
         for line in response.iter_lines():
             if not line:
                 continue
 
             data = json.loads(line.decode("utf-8"))
-
             if "response" in data:
                 yield data["response"]
 
 # local unit testing code
-if __name__ == "__main__":
-    time_log = []
-    llm = LLM()
-    prompt = "Tell me a joke on AI progress."
+# if __name__ == "__main__":
+#     time_log = []
+#     llm = LLM()
+#     prompt = "Tell me a joke on AI progress."
 
-    import time
-    for i in range(15):
-        start_time = time.time()
-        result = ""
-        for response in llm.stream(prompt):
-            result+=response
-        end_time = time.time()
-        time_log.append(end_time - start_time)
-        print(f"Result {i+1}: {result}")
+#     import time
+#     for i in range(15):
+#         start_time = time.time()
+#         result = ""
+#         for response in llm.stream(prompt):
+#             result+=response
+#         end_time = time.time()
+#         time_log.append(end_time - start_time)
+#         print(f"Result {i+1}: {result}")
 
-    print(f"Minimum time: {min(time_log)}")
-    print(f"Average time: {sum(time_log) / len(time_log)}")
-    print(f"Maximum time: {max(time_log)}")
+#     print(f"Minimum time: {min(time_log)}")
+#     print(f"Average time: {sum(time_log) / len(time_log)}")
+#     print(f"Maximum time: {max(time_log)}")

@@ -1,6 +1,6 @@
 logs/
-output/
 models/
+output/
 __pycache__/
 
 future_phase0.2_plan.md
