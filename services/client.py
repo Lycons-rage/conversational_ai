@@ -17,6 +17,7 @@ audio_output_queue = queue.Queue()
 def audio_callback(indata, frames, time, status):
     if status:
         print("Mic:", status)
+
     chunk = indata.copy().flatten()
     asyncio.run_coroutine_threadsafe(
         audio_input_queue.put(chunk),
@@ -127,6 +128,7 @@ async def main():
     global loop
     loop = asyncio.get_event_loop()
     print("Connecting to server...")
+
     async with websockets.connect(WS_URL) as ws:
         print("Connected")
 
@@ -137,6 +139,7 @@ async def main():
             callback=audio_callback
         ):
             print("Mic streaming started")
+
             await asyncio.gather(
                 sender(ws),
                 receiver(ws),
